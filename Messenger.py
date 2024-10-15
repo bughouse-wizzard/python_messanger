@@ -46,12 +46,10 @@ class Messenger:
 
         self.chat_listbox.bind('<<ListboxSelect>>', self.open_chat)
 
-        # Setting up a canvas for scrolling messages
         self.canvas = Canvas(self.right_frame)
         self.scroll_y = Scrollbar(self.right_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_y.grid(row=0, column=1, sticky='ns')
-        
-        # Frame inside canvas to hold messages and make it scrollable
+    
         self.messages_frame = Frame(self.canvas)
         self.canvas.create_window((0, 0), window=self.messages_frame, anchor='nw')
         self.canvas.config(yscrollcommand=self.scroll_y.set)

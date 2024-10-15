@@ -86,20 +86,26 @@ class Messenger:
     def newchat(self):
         chatname = askstring('New Chat', 'Enter chat name')
         if chatname:
-            db.cursor.execute("INSERT INTO Chats (name) VALUES (?)", (chatname,))
-            db.commit()
-            messagebox.showinfo('Chat Adding', 'Success')
-            self.refresh_chat_list()
+            try:
+                db.cursor.execute("INSERT INTO Chats (name) VALUES (?)", (chatname,))
+                db.commit()
+                messagebox.showinfo('Chat Adding', 'Success')
+                self.refresh_chat_list()
+            except Exception as e:
+                messagebox.showerror('Database Error', str(e))
         else:
             messagebox.showwarning('Chat Adding', 'Chat name cannot be empty')
 
     def refresh_chat_list(self):
         self.chat_listbox.delete(0, END)
         self.chat_ids = []
-        chat_names = db.cursor.execute("SELECT name, id FROM Chats").fetchall()
-        for chat_name, chat_id in chat_names:
-            self.chat_listbox.insert(END, chat_name)
-            self.chat_ids.append(chat_id)
+        try:
+            chat_names = db.cursor.execute("SELECT name, id FROM Chats").fetchall()
+            for chat_name, chat_id in chat_names:
+                self.chat_listbox.insert(END, chat_name)
+                self.chat_ids.append(chat_id)
+        except Exception as e:
+            messagebox.showerror('Database Error', str(e))
 
     def open_chat(self, event):
         selection = self.chat_listbox.curselection()
@@ -119,80 +125,98 @@ class Messenger:
     def load_messages(self):
         for widget in self.messages_frame.winfo_children():
             widget.destroy()
-        messages = db.cursor.execute("""
-            SELECT Messages.message, Users.login, Messages.time, Messages.id
-            FROM Messages 
-            JOIN Users ON Messages.user_id = Users.user_id 
-            WHERE Messages.chat_id = ? 
-            ORDER BY Messages.time
-        """, (self.current_chat_id,)).fetchall()
-        row = 0
-        for message_text, sender_login, message_time, message_id in messages:
-            likes = self.get_likes_count(message_id)
-            display_text = f": {likes} | {message_time[:-7]} {sender_login}: {message_text}"
+        try:
+            messages = db.cursor.execute("""
+                SELECT Messages.message, Users.login, Messages.time, Messages.id
+                FROM Messages 
+                JOIN Users ON Messages.user_id = Users.user_id 
+                WHERE Messages.chat_id = ? 
+                ORDER BY Messages.time
+            """, (self.current_chat_id,)).fetchall()
+            row = 0
+            for message_text, sender_login, message_time, message_id in messages:
+                likes = self.get_likes_count(message_id)
+                display_text = f": {likes} | {message_time[:-7]} {sender_login}: {message_text}"
 
-            message_label = Label(self.messages_frame, text=display_text, anchor="w", justify=LEFT)
-            message_label.grid(row=row, column=2, sticky="w")
-            
-            like_button = Button(self.messages_frame, text='👍', command=lambda mid=message_id: self.like_message(mid, self.user_id))
-            like_button.grid(row=row, column=1, sticky="e")
-            
-            comment_button = Button(self.messages_frame, text='🗨', command=lambda mid=message_id: self.comment_message(mid))
-            comment_button.grid(row=row, column=0, sticky="e")
+                message_label = Label(self.messages_frame, text=display_text, anchor="w", justify=LEFT)
+                message_label.grid(row=row, column=2, sticky="w")
+                
+                like_button = Button(self.messages_frame, text='👍', command=lambda mid=message_id: self.like_message(mid, self.user_id))
+                like_button.grid(row=row, column=1, sticky="e")
+                
+                comment_button = Button(self.messages_frame, text='🗨', command=lambda mid=message_id: self.comment_message(mid))
+                comment_button.grid(row=row, column=0, sticky="e")
 
-            row += 1
-
-            comments = self.get_comments(message_id)
-            for comment in comments:
-                comment_label = Label(self.messages_frame, text=f"\t{comment['user']}: {comment['text']}", anchor="w", justify=LEFT)
-                comment_label.grid(row=row, column=2, columnspan=3, sticky='w')
                 row += 1
 
-        self.canvas.update_idletasks()
-        self.canvas.yview_moveto(1)
+                comments = self.get_comments(message_id)
+                for comment in comments:
+                    comment_label = Label(self.messages_frame, text=f"\t{comment['user']}: {comment['text']}", anchor="w", justify=LEFT)
+                    comment_label.grid(row=row, column=2, columnspan=3, sticky='w')
+                    row += 1
+
+            self.canvas.update_idletasks()
+            self.canvas.yview_moveto(1)
+        except Exception as e:
+            messagebox.showerror('Database Error', str(e))
 
     def like_message(self, message_id, user_id):
-        db.cursor.execute("SELECT likes FROM Messages WHERE id = ?", (message_id,))
-        result = db.cursor.fetchone()
-        
-        likes = json.loads(result[0]) if result[0] else []
-        if user_id in likes:
-            likes.remove(user_id)
-        else:
-            likes.append(user_id)
-        db.cursor.execute("UPDATE Messages SET likes = ? WHERE id = ?", (json.dumps(likes), message_id))
-        db.commit()
-        self.load_messages()
+        try:
+            db.cursor.execute("SELECT likes FROM Messages WHERE id = ?", (message_id,))
+            result = db.cursor.fetchone()
+            
+            likes = json.loads(result[0]) if result[0] else []
+            if user_id in likes:
+                likes.remove(user_id)
+            else:
+                likes.append(user_id)
+            db.cursor.execute("UPDATE Messages SET likes = ? WHERE id = ?", (json.dumps(likes), message_id))
+            db.commit()
+            self.load_messages()
+        except Exception as e:
+            messagebox.showerror('Database Error', str(e))
 
     def get_likes_count(self, message_id):
-        db.cursor.execute("SELECT likes FROM Messages WHERE id = ?", (message_id,))
-        result = db.cursor.fetchone()
-        if result is None:
+        try:
+            db.cursor.execute("SELECT likes FROM Messages WHERE id = ?", (message_id,))
+            result = db.cursor.fetchone()
+            if result is None:
+                return 0
+            likes = json.loads(result[0]) if result[0] else []
+            return len(likes)
+        except Exception as e:
+            messagebox.showerror('Database Error', str(e))
             return 0
-        likes = json.loads(result[0]) if result[0] else []
-        return len(likes)
 
     def get_comments(self, message_id):
-        comments = db.cursor.execute("""
-            SELECT Comments.comment, Users.login
-            FROM Comments 
-            JOIN Users ON Comments.user_id = Users.user_id 
-            WHERE Comments.message_id = ? 
-            ORDER BY Comments.time
-        """, (message_id,)).fetchall()
-        return [{'text': comment_text, 'user': user_login} for comment_text, user_login in comments]
+        try:
+            comments = db.cursor.execute("""
+                SELECT Comments.comment, Users.login
+                FROM Comments 
+                JOIN Users ON Comments.user_id = Users.user_id 
+                WHERE Comments.message_id = ? 
+                ORDER BY Comments.time
+            """, (message_id,)).fetchall()
+            return [{'text': comment_text, 'user': user_login} for comment_text, user_login in comments]
+        except Exception as e:
+            messagebox.showerror('Database Error', str(e))
+            return []
 
     def comment_message(self, message_id):
         comment_text = askstring("Add Comment", "Enter your comment:")
         if comment_text:
             if MessageChecker.check_message(comment_text):
-                current_time = datetime.datetime.now()
-                db.cursor.execute("INSERT INTO Comments (message_id, comment, user_id, time) VALUES (?, ?, ?, ?)",
-                                (message_id, comment_text, self.user_id, current_time))
-                db.commit()
-                messagebox.showinfo("Comment", "Comment added successfully")
-                self.load_messages()
-            else: messagebox.showwarning("Warning",)
+                try:
+                    current_time = datetime.datetime.now()
+                    db.cursor.execute("INSERT INTO Comments (message_id, comment, user_id, time) VALUES (?, ?, ?, ?)",
+                                    (message_id, comment_text, self.user_id, current_time))
+                    db.commit()
+                    messagebox.showinfo("Comment", "Comment added successfully")
+                    self.load_messages()
+                except Exception as e:
+                    messagebox.showerror('Database Error', str(e))
+            else:
+                messagebox.showwarning("Warning", "Comment contains forbidden words")
         else:
             messagebox.showwarning("Warning", "Comment cannot be empty")
 
@@ -200,13 +224,19 @@ class Messenger:
         message_text = self.message_entry.get()
         if message_text.strip():
             if MessageChecker.check_message(message_text):
-                current_time = datetime.datetime.now()
-                db.cursor.execute("INSERT INTO Messages (chat_id, message, user_id, time) VALUES (?, ?, ?, ?)",
-                            (self.current_chat_id, message_text, self.user_id, current_time))
-                db.commit()
-                self.message_entry.delete(0, END)
-                self.load_messages()
+                try:
+                    current_time = datetime.datetime.now()
+                    db.cursor.execute("INSERT INTO Messages (chat_id, message, user_id, time) VALUES (?, ?, ?, ?)",
+                                (self.current_chat_id, message_text, self.user_id, current_time))
+                    db.commit()
+                    self.message_entry.delete(0, END)
+                    self.load_messages()
+                except Exception as e:
+                    messagebox.showerror('Database Error', str(e))
             else:
                 messagebox.showwarning("Warning", "Message contains forbidden words")
         else:
             messagebox.showwarning("Warning", "Cannot send empty message")
+
+    def __del__(self):
+        db.close()
